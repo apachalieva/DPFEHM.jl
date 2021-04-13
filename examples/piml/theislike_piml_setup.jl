@@ -12,7 +12,7 @@ using JLD2
 #include("theislike.jl")
 push!(LOAD_PATH,"../../src")
 push!(LOAD_PATH,"./")
-import TheisLike
+#import TheisLike
 
 ########################################################
 # User input

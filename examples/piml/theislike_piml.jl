@@ -2,7 +2,7 @@ import DPFEHM
 import GaussianRandomFields
 import DifferentiableBackwardEuler
 import Optim
-import PyPlot
+#import PyPlot
 import Random
 import Zygote
 
@@ -16,8 +16,8 @@ using Random
 using JLD2
 
 include("theislike_piml_setup.jl")
-push!(LOAD_PATH,"/Users/apachalieva/Documents/Projects/subsurface_flow/git/DPFEHM.jl_fork/src")
-push!(LOAD_PATH,"/Users/apachalieva/Documents/Projects/subsurface_flow/git/DPFEHM.jl_fork/examples/piml/")
+push!(LOAD_PATH,"/home/apachalieva/Projects/subsurface_flow/git/DPFEHM.jl_fork/src")
+push!(LOAD_PATH,"/home/apachalieva/Projects/subsuface_flow/git/DPFEHM.jl_fork/examples/piml/")
 
 # Create generator of (wind,distance) tuples
 n = 51
@@ -34,12 +34,12 @@ y_pts = range(mins[2], maxs[2]; length=ns[2])
 grf = GaussianRandomFields.GaussianRandomField(cov, GaussianRandomFields.KarhunenLoeve(num_eigenvectors), x_pts, y_pts)
 
 pressure_target  = 1.0
-data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:1] for v in 1:1000]
-data_test = [[(GaussianRandomFields.sample(grf), pressure_target)] for i = 1:100]
+data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:1] for v in 1:2000]
+data_test = [[(GaussianRandomFields.sample(grf), pressure_target)] for i = 1:200]
 
 # Place to save stuff
 #folder_name = "AD_results_new"
-epochs = 1:30
+epochs = 1:100
 for epoch in epochs
     #tt = @elapsed Flux.train!(loss, θ, data_train_batch, opt)
     tt = @elapsed Flux.train!(loss, θ, data_train_batch, opt, cb = cb)
@@ -71,6 +71,7 @@ end
 
 #plot_losses(folder_name=folder_name, combine=true)
 
+@save string("loss_data_2000.jld2") meandiffs_train stddiffs_train epochs losses_test losses_train meandiffs_test stddiffs_test rmses_train rmses_test train_time
 #@save string(folder_name,"/data/loss_data.jld2") meandiffs_train stddiffs_train epochs losses_test losses_train meandiffs_test stddiffs_test rmses_train rmses_test train_time θ well_crds mon_well_crds
 
 #run(`ffmpeg -y -r 5 -f image2 -s 1920x1080 -i $folder_name/images/combine%04d.png -vcodec libx264 -crf 25  -pix_fmt yuv420p $folder_name/multitheisdp_1well.mp4`)
