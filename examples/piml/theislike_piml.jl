@@ -34,8 +34,9 @@ y_pts = range(mins[2], maxs[2]; length=ns[2])
 grf = GaussianRandomFields.GaussianRandomField(cov, GaussianRandomFields.KarhunenLoeve(num_eigenvectors), x_pts, y_pts)
 
 pressure_target  = 1.0
-data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:1] for v in 1:2000]
-data_test = [[(GaussianRandomFields.sample(grf), pressure_target)] for i = 1:200]
+# batch 1:1 for one batch size
+data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:64] for v in 1:2]
+data_test = [[(GaussianRandomFields.sample(grf), pressure_target)] for i = 1:2]
 
 # Place to save stuff
 #folder_name = "AD_results_new"
