@@ -71,7 +71,7 @@ model = Chain(
 
 # Neural network function (T, S, target)->(Q1,Q2)
 # 'target' is the target pressure head at the monitoring location
-function aim(T, target)
+function aim(T)
  
   T = Flux.unsqueeze(T, 3)  
   T = Flux.unsqueeze(T, 3)  
@@ -98,14 +98,14 @@ STOR = (-4.0,-1.0) # log10 storativity
 sample() = [10^lerp(rand(), TRANS...), 10^lerp(rand(), STOR...), lerp(rand(), PRES...)]
 
 # Physics model vs NN 
-function mydiff(T, target; train=false)
-    (head(T, aim(T, target), Qinj, rs, t, train=train) - target)
+@everywhere function mydiff(T; train=false)
+    (head(T, aim(T), Qinj, rs, t, train=train) - target)
 end
-function loss(T, target; train=true)
-	mydiff(T, target, train=train)^2
+@everywhere function loss(T; train=true)
+	mydiff(T, train=train)^2
 end
-loss(x; train=true) = sum(map(x->loss(x[1],x[2];train=train),x))
-mydiff(x; train=true) = sum(map(x->mydiff(x[1],x[2];train=train),x))
+loss(x; train=true) = sum(pmap(x->loss(x[1],x[2];train=train), x))
+mydiff(x; train=true) = sum(pmap(x->mydiff(x[1],x[2];train=train), x))
 
 function cb2()
 	# Terminal output
