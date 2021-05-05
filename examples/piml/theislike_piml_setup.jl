@@ -1,6 +1,8 @@
 using Flux
 using Statistics: mean, std
 using Random
+using Distributed
+using ChainRulesCore
 #import MultiTheisDP.MultiTheis
 #using PyPlot
 #ioff()
@@ -12,45 +14,66 @@ using JLD2
 #include("theislike.jl")
 push!(LOAD_PATH,"../../src")
 push!(LOAD_PATH,"./")
-#import TheisLike
 
 ########################################################
 # User input
+n = 51
+ns = [n, n]
+steadyhead = 0e0
+sidelength = 200
+thickness  = 1.0
+mins = [-sidelength, -sidelength] #meters
+maxs = [sidelength, sidelength] #meters
+sigma = 1.0
+lambda = 50
+num_eigenvectors = 200
+coords, neighbors, areasoverlengths, volumes = DPFEHM.regulargrid2d(mins, maxs, ns, thickness)
+dirichletnodes = Int[]
+dirichleths = zeros(size(coords, 2))
+for i = 1:size(coords, 2)
+  if abs(coords[1, i]) == sidelength || abs(coords[2, i]) == sidelength
+  push!(dirichletnodes, i)
+  dirichleths[i] = steadyhead
+  end
+end
+
 # Location to monitor pressure at
-mon_well_crds = [[-75.0,-75.0]]
+@everywhere mon_well_crds = [[-75.0,-75.0]]
 # Location of injection and extraction wells
-well_crds = [[-50.0,-50.0],
-			[50.0,50.0]]
+@everywhere well_crds = [[-50.0,-50.0],[50.0,50.0]]
 # Injection rate
-Qinj = 0.031688 # [m^3/s] (1 MMT water/yr)
+@everywhere Qinj = 0.031688 # [m^3/s] (1 MMT water/yr)
 # Time to check pressure
-t = 30.0*86400.0 # 30 days converted to seconds
+#t = 30.0*86400.0 # 30 days converted to seconds
 # Create xy grid for plotting pressures
-xs = ys = -100.0:1.0:100.0
+#xs = ys = -100.0:1.0:100.0
 # Training epochs
-epochs = 1:120
+epochs = 1:100
 ########################################################
 
+#@everywhere begin
+#  
+#end
 # Calculate distance between extraction and injection wells
-rs = [sqrt((sum((cs-mon_well_crds[1]).^2))) for cs in well_crds]
+@everywhere rs = [sqrt((sum((cs-mon_well_crds[1]).^2))) for cs in well_crds]
 
 # Input/output normalization function
 lerp(x, lo, hi) = x*(hi-lo)+lo
 
-global nevals = 0
+@everywhere global nevals = 0
 # Wrapper around MultiTheis solve returning pressure head at a point
-function head(T::Array{Float64,2},Q1::Float64,Qinj::Float64,rs::Array{Float64,1},t::Float64;train=false)
+@everywhere function head(T::Array{Float64,2},Q1::Float64,Qinj::Float64,rs::Array{Float64,1};train=false)
 	Qs = [Q1,Qinj]
 	if train
 		global nevals = nevals + 1
 	end
-  num_res = TheisLike.solve_numerical(Qs, T, t, rs)
+  num_res = TheisLike.solve_numerical(Qs, T, rs)
 end
 
 # Set random seed for repeatability
-Random.seed!(0)
+@everywhere Random.seed!(0)
 
-model = Chain(
+@everywhere model = Chain(
     Conv((3, 3), 1=>8, pad=(1,1), relu), 
     x -> maxpool(x, (2,2)),
 
@@ -67,22 +90,18 @@ model = Chain(
 
 #print(model)
 # Make neural network parameters trackable by Flux
-θ = params(model)
+@everywhere θ = params(model)
 
 # Neural network function (T, S, target)->(Q1,Q2)
 # 'target' is the target pressure head at the monitoring location
-function aim(T)
+@everywhere function aim(T)
  
   T = Flux.unsqueeze(T, 3)  
   T = Flux.unsqueeze(T, 3)  
-
-  # Q1 = model([T[:]; [target]])
   Q1 = model(T)
 
   # Make sure that Q1 and Q2 are always negative for extraction
-  #Q1 = -softplus(Q1[1])
   Q1 = Q1[1]
-
   #Q2 = -softplus(Q2)
   Q1
 end
@@ -98,14 +117,27 @@ STOR = (-4.0,-1.0) # log10 storativity
 sample() = [10^lerp(rand(), TRANS...), 10^lerp(rand(), STOR...), lerp(rand(), PRES...)]
 
 # Physics model vs NN 
-@everywhere function mydiff(T; train=false)
-    (head(T, aim(T), Qinj, rs, t, train=train) - target)
+@everywhere function mydiff(T, target; train=false)
+    @show myid()
+    (head(T, aim(T), Qinj, rs, train=train) - target)
 end
-@everywhere function loss(T; train=true)
-	mydiff(T, train=train)^2
+@everywhere function loss(T, target; train=true)
+	mydiff(T, target, train=train)^2
 end
-loss(x; train=true) = sum(pmap(x->loss(x[1],x[2];train=train), x))
-mydiff(x; train=true) = sum(pmap(x->mydiff(x[1],x[2];train=train), x))
+
+#loss(x; train=true) = sum(pmap(x->loss(x[1], x[2]; train=train), 1:nworkers(), x) )
+#mydiff(x; train=true) = sum(map(x->mydiff(x[1], x[2]; train=train), 1:nworkers(), x) 
+
+function ChainRulesCore.rrule(::typeof(pmap), f, x)
+  results_and_backs = pmap(i->Zygote.pullback(f, x[i]), 1:length(x))  
+  results = map(x->x[1], results_and_backs)
+  backs = map(x->x[2], results_and_backs)
+  return results, delta->pmap(i->backs[i](delta[i]), 1:length(delta))
+end
+
+loss(x; train=true) = sum(pmap(x->loss(x[1], x[2]; train=train), x) )
+mydiff(x; train=true) = sum(pmap(x->mydiff(x[1], x[2]; train=train), x) )
+
 
 function cb2()
 	# Terminal output

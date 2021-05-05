@@ -4,25 +4,11 @@ module TheisLike
 	#push!(LOAD_PATH,"/Users/dharp/source/DPFEHM.jl/src")
 	import GaussianRandomFields
 	using GaussianRandomFields
+	using Random
 	import DifferentiableBackwardEuler
 	import DPFEHM
 
-	n = 51
-	ns = [n, n]
-	steadyhead = 0e0
-	sidelength = 200
-	thickness = 1.0
-	mins = [-sidelength, -sidelength] #meters
-	maxs = [sidelength, sidelength] #meters
-	coords, neighbors, areasoverlengths, volumes = DPFEHM.regulargrid2d(mins, maxs, ns, thickness)
-	dirichletnodes = Int[]
-	dirichleths = zeros(size(coords, 2))
-	for i = 1:size(coords, 2)
-		if abs(coords[1, i]) == sidelength || abs(coords[2, i]) == sidelength
-			push!(dirichletnodes, i)
-			dirichleths[i] = steadyhead
-		end
-	end
+	include("theislike_piml_setup.jl")
 
 	function getQs(Qs::Vector, rs::Vector)
 		return sum(map(i->getQs(Qs[i], rs[i]), 1:length(Qs)))
@@ -36,11 +22,9 @@ module TheisLike
 		return Qs
 	end
 
-	function solve_numerical(Qs, T, t, rs)
+	function solve_numerical(Qs, T, rs)
 		logKs2Ks_neighbors(Ks) = exp.(0.5 * (Ks[map(p->p[1], neighbors)] .+ Ks[map(p->p[2], neighbors)]))
 		Qs = getQs(Qs, rs)
-
-		#@assert length(logKs) == length(Qs)
 		@assert length(T) == length(Qs)
 
 		Ks_neighbors = logKs2Ks_neighbors(T)
