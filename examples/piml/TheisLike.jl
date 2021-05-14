@@ -1,14 +1,39 @@
 import Zygote
+import DPFEHM
+using Distributed
+using DPFEHM
+using Random
+using ChainRulesCore
+using Flux
+using Statistics: mean, std
+using JLD2
 
-module TheisLike
+@everywhere module TheisLike
 	#push!(LOAD_PATH,"/Users/dharp/source/DPFEHM.jl/src")
 	import GaussianRandomFields
 	using GaussianRandomFields
-	using Random
+	using Distributed
+	#using Random
 	import DifferentiableBackwardEuler
-	import DPFEHM
+	using DPFEHM
 
-	include("theislike_piml_setup.jl")
+	n = 51
+	ns = [n, n]
+	steadyhead = 0e0
+	sidelength = 200
+	thickness  = 1.0
+	mins = [-sidelength, -sidelength] #meters
+	maxs = [sidelength, sidelength] #meters
+	num_eigenvectors = 200
+	coords, neighbors, areasoverlengths, volumes = DPFEHM.regulargrid2d(mins, maxs, ns, thickness)
+	dirichletnodes = Int[]
+	dirichleths = zeros(size(coords, 2))
+	for i = 1:size(coords, 2)
+		if abs(coords[1, i]) == sidelength || abs(coords[2, i]) == sidelength
+			push!(dirichletnodes, i)
+			dirichleths[i] = steadyhead
+		end
+	end
 
 	function getQs(Qs::Vector, rs::Vector)
 		return sum(map(i->getQs(Qs[i], rs[i]), 1:length(Qs)))

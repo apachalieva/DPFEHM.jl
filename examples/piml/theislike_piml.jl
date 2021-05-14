@@ -1,5 +1,5 @@
 import DPFEHM
-import GaussianRandomFields
+@everywhere import GaussianRandomFields
 import DifferentiableBackwardEuler
 import Optim
 #import PyPlot
@@ -8,32 +8,49 @@ import Zygote
 import ChainRulesCore
 
 @everywhere using Flux
+@everywhere using ChainRulesCore
 using Statistics: mean, std
 using Random
 using JLD2
 #using TheisLike
 
-Random.seed!(0)
+@everywhere begin
+    Random.seed!(0)
 
-include("theislike_piml_setup.jl")
-push!(LOAD_PATH,"/home/apachalieva/Projects/subsurface_flow/git/DPFEHM.jl_fork/src")
-push!(LOAD_PATH,"/home/apachalieva/Projects/subsuface_flow/git/DPFEHM.jl_fork/examples/piml/")
+    include("theislike_piml_setup.jl")
+    push!(LOAD_PATH,"/home/apachalieva/Projects/subsurface_flow/git/DPFEHM.jl_fork/src")
+    push!(LOAD_PATH,"/home/apachalieva/Projects/subsuface_flow/git/DPFEHM.jl_fork/examples/piml/")
 
-cov = GaussianRandomFields.CovarianceFunction(2, GaussianRandomFields.Matern(lambda, 1; σ=sigma))
-x_pts = range(mins[1], maxs[1]; length=ns[1])
-y_pts = range(mins[2], maxs[2]; length=ns[2])
-grf = GaussianRandomFields.GaussianRandomField(cov, GaussianRandomFields.KarhunenLoeve(num_eigenvectors), x_pts, y_pts)
+    function ChainRulesCore.rrule(::typeof(pmap), f, x)
+        results_and_backs = pmap(i->Zygote.pullback(f, x[i]), 1:length(x))  
+        results = map(x->x[1], results_and_backs)
+        backs = map(x->x[2], results_and_backs)
+        return results, delta->pmap(i->backs[i](delta[i]), 1:length(delta))
+    end
+    n = 51
+    ns = [n, n]
+    steadyhead = 0e0
+    sidelength = 200
+    mins = [-sidelength, -sidelength] #meters
+    maxs = [sidelength, sidelength] #meters
+    num_eigenvectors = 200
+    sigma = 1.0
+    lambda = 50
+    cov = GaussianRandomFields.CovarianceFunction(2, GaussianRandomFields.Matern(lambda, 1; σ=sigma))
+    x_pts = range(mins[1], maxs[1]; length=ns[1])
+    y_pts = range(mins[2], maxs[2]; length=ns[2])
+    grf = GaussianRandomFields.GaussianRandomField(cov, GaussianRandomFields.KarhunenLoeve(num_eigenvectors), x_pts, y_pts)
 
-pressure_target  = 1.0
-# batch 1:1 for one batch size
-data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:4] for v in 1:2]
-data_test = [[(GaussianRandomFields.sample(grf), pressure_target)] for i = 1:2]
+    pressure_target  = 1.0
+    # batch 1:1 for one batch size
+    data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:2] for v in 1:1000]
+    data_test = [[(GaussianRandomFields.sample(grf), pressure_target)] for i = 1:100]
+end
 
 println("The training has started..")
 
 # Place to save stuff
 #folder_name = "AD_results_new"
-
 for epoch in epochs
     #println("Epoch ", epoch)
     #tt = @elapsed Flux.train!(loss, θ, data_train_batch, opt)
