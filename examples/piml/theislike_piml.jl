@@ -42,10 +42,11 @@ using JLD2
     grf = GaussianRandomFields.GaussianRandomField(cov, GaussianRandomFields.KarhunenLoeve(num_eigenvectors), x_pts, y_pts)
 
     pressure_target  = 1.0
-    # batch 1:1 for one batch size
-    data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:2] for v in 1:1000]
-    data_test = [[(GaussianRandomFields.sample(grf), pressure_target)] for i = 1:100]
 end
+
+# batch 1:1 for one batch size
+data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:2] for v in 1:1000]
+data_test = [[(GaussianRandomFields.sample(grf), pressure_target)] for i = 1:100]
 
 println("The training has started..")
 
