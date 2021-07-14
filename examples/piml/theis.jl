@@ -19,13 +19,7 @@ global train_time = Float64[]
     using ChainRulesCore
     using Random
     using GaussianRandomFields
-    #using Distributed
-    #using Random
     using DPFEHM
-
-    Random.seed!(0)
-    #push!(LOAD_PATH,"/home/apachalieva/Projects/subsurface_flow/git/DPFEHM.jl_fork/src")
-    #push!(LOAD_PATH,"/home/apachalieva/Projects/subsuface_flow/git/DPFEHM.jl_fork/examples/piml/")
 
     n = 51
     ns = [n, n]
@@ -82,16 +76,12 @@ end
 model = Chain(
     Conv((3, 3), 1=>8, pad=(1,1), relu), 
     x -> maxpool(x, (2,2)),
-
     Conv((3, 3), 8=>16, pad=(1,1), relu),
     x -> maxpool(x, (2,2)),
-
     Conv((3, 3), 16=>8, pad=(1,1), relu),
     x -> maxpool(x, (2,2)),
-
     flatten,
     Dense(288, 1),
-
 ) |> f64
 
 # Make neural network parameters trackable by Flux
@@ -100,14 +90,9 @@ model = Chain(
 function loss(x)
     Ts = reshape(hcat(map(y->y[1], x)...), size(x[1][1], 1), size(x[1][1], 2), 1, length(x))
     targets = map(y->y[2], x)
-
     #@show size(Ts)
-    #@show targets
-   
     Q1 = model(Ts)
     Qs = map(Q->[Q, Qinj], Q1)
-
-    # i and 1 might be swapped
     loss = sum(pmap(i->solve_numerical(Qs[i], Ts[:, :, 1, i], rs) - targets[i], 1:size(Ts, 4)).^2)
     return loss
 end
@@ -147,7 +132,7 @@ lerp(x, lo, hi) = x*(hi-lo)+lo
 sample() = [10^lerp(rand(), TRANS...), 10^lerp(rand(), STOR...), lerp(rand(), PRES...)]
 
 # batch 1:1 for one batch size
-data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:2] for v in 1:1000]
+data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:64] for v in 1:1000]
 data_test = [[(GaussianRandomFields.sample(grf), pressure_target)] for i = 1:100]
 
 println("The training has started..")
@@ -164,5 +149,5 @@ for epoch in epochs
 end
 println("The training has finished!")
 
-@save string("loss_data_2000.jld2") epochs losses_test  rmses_test train_time
+@save string("loss_data_1000.jld2") epochs losses_test  rmses_test train_time
 println("The data has beens saved!")
