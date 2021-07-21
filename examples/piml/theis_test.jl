@@ -10,7 +10,9 @@ import ChainRulesCore
 using JLD2
 using Statistics: mean, std
 
+global losses_train = Float64[]
 global losses_test = Float64[]
+global rmses_train = Float64[]
 global rmses_test = Float64[]
 global train_time = Float64[]
 
@@ -121,7 +123,7 @@ well_crds = [[-50.0,-50.0],[50.0,50.0]]
 # Injection rate
 Qinj = 0.031688 # [m^3/s] (1 MMT water/yr)
 # Training epochs
-epochs = 1:120
+epochs = 1:10
 # Calculate distance between extraction and injection wells
 rs = [sqrt((sum((cs-mon_well_crds[1]).^2))) for cs in well_crds]
 
@@ -132,8 +134,8 @@ lerp(x, lo, hi) = x*(hi-lo)+lo
 sample() = [10^lerp(rand(), TRANS...), 10^lerp(rand(), STOR...), lerp(rand(), PRES...)]
 
 # batch 1:1 for one batch size
-data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:64] for v in 1:1200]
-data_test = [[(GaussianRandomFields.sample(grf), pressure_target)] for i = 1:120]
+data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:64] for v in 1:10]
+data_test = [[(GaussianRandomFields.sample(grf), pressure_target)] for i = 1:10]
 
 println("The training has started..")
 loss_train = sum(map(x->loss(x), data_train_batch))
@@ -141,25 +143,26 @@ rmse_train = sqrt(loss_train/length(data_train_batch))
 loss_test = sum(map(x->loss(x), data_test))
 rmse_test = sqrt(loss_test/length(data_test))
 println(string("epoch: 0 train rmse: ", rmse_train, " test rmse: ", rmse_test))
-# Save convergence metrics
+push!(losses_train, loss_train)
 push!(losses_test, loss_test)
+push!(rmses_train, rmse_train)
 push!(rmses_test, rmse_test)
 for epoch in epochs
     tt = @elapsed Flux.train!(loss, θ, data_train_batch, opt)#, cb = cb)
     push!(train_time, tt)
     loss_train = sum(map(x->loss(x), data_train_batch))
-    rmse_train = sqrt(loss_train/length(data_train_batch))
     loss_test = sum(map(x->loss(x), data_test))
+    rmse_train = sqrt(loss_train/length(data_train_batch))
     rmse_test = sqrt(loss_test/length(data_test))
     # Terminal output
     println(string("epoch: ", epoch, " train rmse: ", rmse_train, " test rmse: ", rmse_test))
     # Save convergence metrics
     push!(losses_train, loss_train)
-    push!(rmses_train, rmse_train)
     push!(losses_test, loss_test)
+    push!(rmses_train, rmse_train)
     push!(rmses_test, rmse_test)
 end
 println("The training has finished!")
 
-@save string("loss_data_1200.jld2") epochs losses_train  rmses_train  losses_test  rmses_test  train_time
+@save string("loss_data_10.jld2") epochs losses_train  rmses_train  losses_test  rmses_test  train_time
 println("The data has beens saved!")
