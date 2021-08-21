@@ -54,7 +54,7 @@ global train_time = Float64[]
         sum(Qs .* ((collect(1:size(coords, 2)) .== i) for i in is))
     end
 
-    function solve_numerical(Qs, T, rs)
+    function solve_numerical(Qs, T)
         logKs2Ks_neighbors(Ks) = exp.(0.5 * (Ks[map(p->p[1], neighbors)] .+ Ks[map(p->p[2], neighbors)]))
         Qs = getQs(Qs, injection_extraction_nodes)
         @assert length(T) == length(Qs)
@@ -138,7 +138,7 @@ function loss(x)
     #@show size(Ts)
     Q1 = model(Ts)
     Qs = map(Q->[Q, Qinj], Q1)
-    loss = sum(map(i->solve_numerical(Qs[i], Ts[:, :, 1, i], rs) - targets[i], 1:size(Ts, 4)).^2)
+    loss = sum(map(i->solve_numerical(Qs[i], Ts[:, :, 1, i]) - targets[i], 1:size(Ts, 4)).^2)
     return loss
 end
 
@@ -149,7 +149,6 @@ Qinj = 0.031688 # [m^3/s] (1 MMT water/yr)
 # Training epochs
 epochs = 1:1000
 # Calculate distance between extraction and injection wells
-rs = [sqrt((sum((cs-mon_well_crds[1]).^2))) for cs in well_crds]
 monitoring_well_node = 781
 @assert coords[:, monitoring_well_node] == [-80, -80]
 injection_extraction_nodes = [1041, 1821]
@@ -171,7 +170,7 @@ println(string("epoch: 0 train rmse: ", rmse_train, " test rmse: ", rmse_test))
 push!(losses_test, loss_test)
 push!(rmses_test, rmse_test)
 for epoch in epochs
-    data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:batch_size] for v in 1:1000]
+    #data_train_batch = [[(GaussianRandomFields.sample(grf), pressure_target) for i = 1:batch_size] for v in 1:1000]
     tt = @elapsed Flux.train!(loss, θ, data_train_batch, opt)
     push!(train_time, tt)
     loss_train = sum(map(x->loss(x), data_train_batch))
@@ -188,5 +187,5 @@ for epoch in epochs
 end
 println("The training has finished!")
 
-@save string("loss_data_e1000_b1000.jld2") epochs losses_train  rmses_train  losses_test  rmses_test  train_time
+@save string("loss_e1000_b1000.jld2") epochs losses_train  rmses_train  losses_test  rmses_test  train_time
 println("The data has beens saved!")
